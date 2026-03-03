@@ -15,6 +15,7 @@ pyrootutils.setup_root(".project-root", pythonpath=True)
 from typing import List
 import platform
 import multiprocessing
+from tqdm import tqdm
 from transformers import AutoTokenizer
 
 from generation.generator import Generator
@@ -42,7 +43,8 @@ def worker_annotate(
     built_few_shot_prompts = []
     required_patterns = [r'\b((in|from)\s+(the\s+)?report)\b', r'\b(not\s+(in\s+)?(the\s+)?table)\b']
 
-    for idx, g_eid in enumerate(g_eids):
+    pbar = tqdm(g_eids, desc=f"Annotate Worker {pid}", position=pid, leave=True)
+    for idx, g_eid in enumerate(pbar):
         g_data_item = dataset[g_eid]
         g_dict[g_eid] = {
             'generations': [],
@@ -96,10 +98,7 @@ def worker_annotate(
             prompt = few_shot_prompt + "\n\n" + generate_prompt
             prompt_text = prompt
 
-        print(f"Process#{pid}: Building prompt for eid#{g_eid}, original_id#{g_data_item['id']}")
         built_few_shot_prompts.append((g_eid, prompt))
-
-        print(f"Process#{pid}: Prompts ready with {len(built_few_shot_prompts)} parallels. Run openai API.")
         response_dict = generator.generate_one_pass(
             prompts=built_few_shot_prompts,
             verbose=args.verbose,

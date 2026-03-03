@@ -10,6 +10,7 @@ import time
 import numpy as np
 import pyrootutils
 import random
+from tqdm import tqdm
 pyrootutils.setup_root('.project-root', pythonpath=True)
 
 from nsql.nsql_exec import Executor, NeuralDB
@@ -35,11 +36,11 @@ def worker_execute(
     print(f"Process#{pid} using API file {apifile}")
     n_total_samples, n_correct_samples = 0, 0
 
-    for eid, data_item in enumerate(dataset):
+    pbar = tqdm(enumerate(dataset), total=len(dataset), desc=f"Binder Exec Worker {pid}", position=pid, leave=True)
+    for eid, data_item in pbar:
         eid = str(eid)
         if eid not in nsql_dict:
             continue
-        print(f"Process#{pid}: eid {eid}, wtq-id {data_item['id']}")
         result_dict[eid] = dict()
         result_dict[eid]['question'] = data_item['question']
         result_dict[eid]['gold_answer'] = data_item['answer_text']
@@ -58,7 +59,6 @@ def worker_execute(
             continue
         result_dict[eid]['all_nsqls'] = nsqls
         for idx, nsql in enumerate(nsqls):
-            print(f"Process#{pid}: eid {eid}, original_id {data_item['id']}, executing program#{idx}")
             try:
                 if len(nsql) == 0:
                     exec_answer_list.append('<error>')
@@ -82,7 +82,7 @@ def worker_execute(
                     nsql_exec_answer_dict[nsql] = exec_answer
                 exec_answer_list.append(exec_answer)
             except Exception as e:
-                print(f"Process#{pid}: Execution error {e}")
+                tqdm.write(f"Worker {pid}: Execution error on eid {eid}: {e}")
                 exec_answer = '<error>'
                 exec_answer_list.append(exec_answer)
                 result_dict[eid]['failed_executions'].append([idx, nsql, str(e)])
@@ -111,13 +111,7 @@ def worker_execute(
         result_dict[eid]['nsqls'] = pred_answer_nsqls
         result_dict[eid]['answer_list'] = exec_answer_list
         n_correct_samples += score
-        print(f'Process#{pid}: pred answer: {pred_answer}')
-        print(f'Process#{pid}: gold answer: {gold_answer}')
-        if score == 1:
-            print(f'Process#{pid}: Correct!')
-        else:
-            print(f'Process#{pid}: Wrong.')
-        print(f'Process#{pid}: Accuracy: {n_correct_samples}/{n_total_samples} = {n_correct_samples / n_total_samples}')
+        pbar.set_postfix(acc=f"{n_correct_samples}/{n_total_samples} ({n_correct_samples / n_total_samples:.2%})")
     
     return result_dict
 

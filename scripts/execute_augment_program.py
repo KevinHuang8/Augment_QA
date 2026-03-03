@@ -13,6 +13,7 @@ import random
 import re
 import pyrootutils
 pyrootutils.setup_root('.project-root', pythonpath=True)
+from tqdm import tqdm
 from transformers import AutoTokenizer
 import pandas as pd
 
@@ -44,11 +45,11 @@ def worker_execute(
     generator = Generator(args, api_key_file=apifile)
     em_and_f1 = TaTQAEmAndF1()
 
-    for eid, data_item in enumerate(dataset):
+    pbar = tqdm(enumerate(dataset), total=len(dataset), desc=f"Augment Exec Worker {pid}", position=pid, leave=True)
+    for eid, data_item in pbar:
         eid = str(eid)
         if eid not in nsql_dict:
             continue
-        print(f"Process#{pid}: eid {eid}, wtq-id {data_item['id']}")
         result_dict[eid] = dict()
         result_dict[eid]['question'] = data_item['question']
         result_dict[eid]['gold_answer'] = data_item['answer_text']
@@ -61,7 +62,6 @@ def worker_execute(
         exec_answer_list = []
         base_sqls = None
         for idx, nsql in enumerate(nsql_dict[eid]['nsqls']):
-            print(f"Process#{pid}: eid {eid}, original_id {data_item['id']}, executing program#{idx}")
             try:
                 exec_data_item = copy.deepcopy(data_item)
                 table = exec_data_item['table']
@@ -181,10 +181,7 @@ def worker_execute(
 
                     prompt_text = prompt
 
-                print(f"Process#{pid}: Building prompt for eid#{eid}, original_id#{exec_data_item['id']}")
                 built_few_shot_prompts = [(eid, prompt)]
-
-                print(f"Process#{pid}: Prompts ready with {len(built_few_shot_prompts)} parallels. Run openai API.")
                 need_api_call = True
                 
                 if len(nsql_dict[eid]['nsqls']) > 1 and len(aug_commands) == 0:
@@ -228,14 +225,14 @@ def worker_execute(
                             exec_answer = [floatify_ans(exec_answer)]
                         exec_answer_list.append(exec_answer)
                     except Exception as e:
-                        print(f"Process#{pid}\nError when executing SQL query #{sql_ind}: Execution error {e}")
+                        tqdm.write(f"Worker {pid}: SQL exec error on eid {eid}, query #{sql_ind}: {e}")
                         exec_histories[sql_ind].append(str(e))
                         exec_answer = '<error>'
                         exec_answer_list.append(exec_answer)
                         result_dict[eid]['failed_executions'].append(
                             [idx*args.sampling_n+sql_ind, nsql, exec_histories[sql_ind][-1]])
             except Exception as e:
-                print(f"Process#{pid}\nError when augmenting table\nAugmentation error {e}")
+                tqdm.write(f"Worker {pid}: Augmentation error on eid {eid}: {e}")
                 exec_answer = ['<error>'] * args.sampling_n
                 exec_answer_list.extend(exec_answer)
                 result_dict[eid]['nsqls'].extend(['<error>'] * args.sampling_n)
@@ -257,8 +254,6 @@ def worker_execute(
         gold_answer = data_item['answer_text']
         if args.dataset == 'tatqa' and len(gold_answer) == 2 and gold_answer[-1] == '###':
             gold_answer = gold_answer[0]
-        print(f'Process#{pid}: pred answer: {pred_answer}')
-        print(f'Process#{pid}: gold answer: {gold_answer}')
         if args.dataset == 'tatqa':
             data_item['answer'] = gold_answer
             if pred_answer == '<error|empty>':
@@ -280,11 +275,7 @@ def worker_execute(
         result_dict[eid]['score'] = score
         result_dict[eid]['exec_histories'] = exec_histories
         n_correct_samples += score
-        if score == 1:
-            print(f'Process#{pid}: Correct!')
-        else:
-            print(f'Process#{pid}: Wrong.')
-        print(f'Process#{pid}: Accuracy: {n_correct_samples}/{n_total_samples} = {n_correct_samples / n_total_samples}')
+        pbar.set_postfix(acc=f"{n_correct_samples}/{n_total_samples} ({n_correct_samples / n_total_samples:.2%})")
 
     return result_dict
 

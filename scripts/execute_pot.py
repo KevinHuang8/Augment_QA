@@ -15,6 +15,7 @@ import func_timeout
 from typing import List
 import platform
 import multiprocessing
+from tqdm import tqdm
 from transformers import AutoTokenizer
 from tenacity import retry, stop_after_attempt, wait_exponential
 from openai import OpenAI
@@ -98,7 +99,8 @@ def worker_annotate(
     g_dict = dict()
     total_num, correct_num = 0, 0
 
-    for idx, g_eid in enumerate(g_eids):
+    pbar = tqdm(g_eids, desc=f"POT Worker {pid}", position=pid, leave=True)
+    for idx, g_eid in enumerate(pbar):
         g_data_item = dataset[g_eid]
         g_dict[g_eid] = {
             'generations': [],
@@ -132,7 +134,6 @@ def worker_annotate(
             prompt = few_shot_prompt + "\n\n" + generate_prompt
             prompt_text = prompt
 
-        print(f"Process#{pid}: Building prompt for eid#{g_eid}, original_id#{g_data_item['id']}")
         messages = [
             {"role": "user", "content": prompt}
         ]
@@ -176,11 +177,8 @@ def worker_annotate(
         g_dict[g_eid]['error_msg'] = error_msg
         if score == 1:
             correct_num += 1
-            print(f"Process#{pid}: eid#{g_eid} correct!")
-        else:
-            print(f"Process#{pid}: eid#{g_eid} wrong!")
         total_num += 1
-        print(f"Process#{pid}: {correct_num}/{total_num} = {correct_num / total_num}")
+        pbar.set_postfix(acc=f"{correct_num}/{total_num} ({correct_num / total_num:.2%})")
 
     return g_dict
 
