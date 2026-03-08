@@ -1,5 +1,6 @@
 """
 Multiprocess annotating binder programs.
+Adapted for local vLLM inference (Qwen, etc.) instead of OpenAI API.
 """
 
 import time
@@ -15,7 +16,6 @@ import func_timeout
 from typing import List
 import platform
 import multiprocessing
-from tqdm import tqdm
 from transformers import AutoTokenizer
 from tenacity import retry, stop_after_attempt, wait_exponential
 from openai import OpenAI
@@ -26,6 +26,8 @@ from utils.utils import load_data_split
 from nsql.database import NeuralDB
 
 ROOT_DIR = os.path.join(os.path.dirname(__file__), "../")
+
+VLLM_BASE_URL = os.environ.get("VLLM_BASE_URL", "http://localhost:8000/v1")
 
 
 def safe_execute(code_string: str, keys=None):
@@ -58,7 +60,10 @@ def parse_api_result(result):
 
 @retry(stop=stop_after_attempt(6), wait=wait_exponential(multiplier=1, min=4, max=30))
 def call_chatgpt_api(engine, messages, max_tokens, temperature, top_p, n, stop, key):
-    client = OpenAI(api_key=key)
+    client = OpenAI(
+        base_url=VLLM_BASE_URL,
+        api_key="dummy"
+    )
     
     result = client.chat.completions.create(
         model=engine,
@@ -68,7 +73,6 @@ def call_chatgpt_api(engine, messages, max_tokens, temperature, top_p, n, stop, 
         top_p=top_p,
         n=n,
         stop=stop,
-        seed=0,
     )
     
     return result
@@ -99,8 +103,7 @@ def worker_annotate(
     g_dict = dict()
     total_num, correct_num = 0, 0
 
-    pbar = tqdm(g_eids, desc=f"POT Worker {pid}", position=pid, leave=True)
-    for idx, g_eid in enumerate(pbar):
+    for idx, g_eid in enumerate(g_eids):
         g_data_item = dataset[g_eid]
         g_dict[g_eid] = {
             'generations': [],
@@ -134,11 +137,12 @@ def worker_annotate(
             prompt = few_shot_prompt + "\n\n" + generate_prompt
             prompt_text = prompt
 
+        print(f"Process#{pid}: Building prompt for eid#{g_eid}, original_id#{g_data_item['id']}")
         messages = [
             {"role": "user", "content": prompt}
         ]
         result = call_chatgpt_api(
-            'gpt-3.5-turbo-1106',
+            args.engine,
             messages,
             max_tokens=256,
             temperature=0.0,
@@ -177,8 +181,11 @@ def worker_annotate(
         g_dict[g_eid]['error_msg'] = error_msg
         if score == 1:
             correct_num += 1
+            print(f"Process#{pid}: eid#{g_eid} correct!")
+        else:
+            print(f"Process#{pid}: eid#{g_eid} wrong!")
         total_num += 1
-        pbar.set_postfix(acc=f"{correct_num}/{total_num} ({correct_num / total_num:.2%})")
+        print(f"Process#{pid}: {correct_num}/{total_num} = {correct_num / total_num}")
 
     return g_dict
 
@@ -211,8 +218,8 @@ def main():
     
     g_dict = dict()
     worker_results = []
-    if args.debug: 
-        import pdb; pdb.set_trace()
+    if args.n_processes == 1:
+        # Single process: call worker directly to avoid multiprocessing pickling issues
         res = worker_annotate(
             0,
             args,
