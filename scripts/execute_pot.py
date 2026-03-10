@@ -10,7 +10,7 @@ import copy
 import os
 import random
 import pyrootutils
-pyrootutils.setup_root(".project-root", pythonpath=True)
+pyrootutils.setup_root(search_from=__file__, indicator=".project-root", pythonpath=True)
 
 import func_timeout
 from typing import List
@@ -123,7 +123,7 @@ def worker_annotate(
             max_row -= 10
             query_table = linearize_table(g_data_item, n_rows=max_row)
         generate_prompt += query_table
-        prompt = few_shot_prompt + "\n\n" + generate_prompt
+        prompt = generate_prompt
 
         # Ensure the input length fit Codex max input tokens by shrinking the n_shots
         prompt_text = prompt
@@ -134,8 +134,10 @@ def worker_annotate(
                 file_path=args.prompt_file,
                 n_shots=n_shots
             )
-            prompt = few_shot_prompt + "\n\n" + generate_prompt
+            prompt = generate_prompt
             prompt_text = prompt
+
+        prompt += '\nWrite a python program to answer the question. Save the answer in a variable named "ans". Do not output anything else other than the python code.'
 
         print(f"Process#{pid}: Building prompt for eid#{g_eid}, original_id#{g_data_item['id']}")
         messages = [
@@ -183,6 +185,9 @@ def worker_annotate(
             correct_num += 1
             print(f"Process#{pid}: eid#{g_eid} correct!")
         else:
+            print(f'prompt: {prompt}')
+            print(f'program: {r}')
+            print(f'expected: {gold_answer}, predicted: {ans}')
             print(f"Process#{pid}: eid#{g_eid} wrong!")
         total_num += 1
         print(f"Process#{pid}: {correct_num}/{total_num} = {correct_num / total_num}")
@@ -195,7 +200,7 @@ def main():
     args.api_config_file = os.path.join(ROOT_DIR, args.api_config_file)
     args.prompt_file = os.path.join(ROOT_DIR, args.prompt_file)
     print(f"==================== Prompt file: {args.prompt_file} ====================")
-    args.save_dir = os.path.join(ROOT_DIR, args.save_dir)
+    # args.save_dir = os.path.join(ROOT_DIR, args.save_dir)
     os.makedirs(args.save_dir, exist_ok=True)
     args.stop_tokens = "\n\n" if 'code' in args.prompt_file else "\n\n\n"
 
@@ -255,7 +260,6 @@ def main():
         n_correct_samples += item['score']
     print(f'Overall Accuracy: {n_correct_samples}/{len(g_dict)} = {n_correct_samples / len(g_dict)}')
     
-    # Save annotation results
     with open(os.path.join(args.save_dir, args.output_program_file), 'w') as f:
         json.dump(g_dict, f, indent=4)
 

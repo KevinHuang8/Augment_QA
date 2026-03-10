@@ -10,7 +10,7 @@ import os
 import random
 import re
 import pyrootutils
-pyrootutils.setup_root(".project-root", pythonpath=True)
+pyrootutils.setup_root(search_from=__file__, indicator=".project-root", pythonpath=True)
 
 from typing import List
 import platform
@@ -72,7 +72,9 @@ def worker_annotate(
             info_title=db.table_titles[0],
             max_row=max_row
         )
-        max_prompt_tokens = args.max_api_total_tokens - args.max_generation_tokens
+        system_prompt_tokens = len(tokenizer.tokenize(generator.system_prompt)) if generator.system_prompt else 0
+        chat_template_overhead = 20
+        max_prompt_tokens = args.max_api_total_tokens - args.max_generation_tokens - system_prompt_tokens - chat_template_overhead
         while len(tokenizer.tokenize(query_table)) >= max_prompt_tokens - remain_tokens:
             max_row -= 10
             query_table = generator.build_generate_prompt(
@@ -181,6 +183,15 @@ def main():
     worker_results = []
     if args.debug: 
         import pdb; pdb.set_trace()
+        res = worker_annotate(
+            0,
+            args,
+            generate_eids_group[0],
+            dataset,
+            tokenizer
+        )
+        g_dict.update(res)
+    elif args.n_processes == 1:
         res = worker_annotate(
             0,
             args,

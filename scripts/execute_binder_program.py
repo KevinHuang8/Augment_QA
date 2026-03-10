@@ -11,7 +11,7 @@ import numpy as np
 import pyrootutils
 import random
 from tqdm import tqdm
-pyrootutils.setup_root('.project-root', pythonpath=True)
+pyrootutils.setup_root(search_from=__file__, indicator=".project-root", pythonpath=True)
 
 from nsql.nsql_exec import Executor, NeuralDB
 from utils.normalizer import post_process_sql
@@ -35,6 +35,7 @@ def worker_execute(
     apifile = args.api_config_file
     print(f"Process#{pid} using API file {apifile}")
     n_total_samples, n_correct_samples = 0, 0
+    executor = Executor(args, apifile)
 
     pbar = tqdm(enumerate(dataset), total=len(dataset), desc=f"Binder Exec Worker {pid}", position=pid, leave=True)
     for eid, data_item in pbar:
@@ -48,7 +49,6 @@ def worker_execute(
         n_total_samples += 1
         table = data_item['table']
         title = table['page_title']
-        executor = Executor(args, apifile)
         # Execute
         exec_answer_list = []
         nsql_exec_answer_dict = dict()
@@ -163,6 +163,14 @@ def main():
             nsql_dict_group[pid],
         )
         result_dict.update(worker_results)
+    elif args.n_processes == 1:
+        res = worker_execute(
+            0,
+            args,
+            dataset,
+            nsql_dict_group[0],
+        )
+        result_dict.update(res)
     else:
         pool = multiprocessing.Pool(processes=args.n_processes)
         for pid in range(args.n_processes):

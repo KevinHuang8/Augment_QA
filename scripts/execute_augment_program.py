@@ -12,7 +12,7 @@ import numpy as np
 import random
 import re
 import pyrootutils
-pyrootutils.setup_root('.project-root', pythonpath=True)
+pyrootutils.setup_root(search_from=__file__, indicator=".project-root", pythonpath=True)
 from tqdm import tqdm
 from transformers import AutoTokenizer
 import pandas as pd
