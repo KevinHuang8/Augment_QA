@@ -12,8 +12,7 @@ import numpy as np
 import random
 import re
 import pyrootutils
-pyrootutils.setup_root(search_from=__file__, indicator=".project-root", pythonpath=True)
-from tqdm import tqdm
+pyrootutils.setup_root('.project-root', pythonpath=True)
 from transformers import AutoTokenizer
 import pandas as pd
 
@@ -32,11 +31,13 @@ def worker_execute(
         args,
         dataset,
         nsql_dict,
-        tokenizer
+        tokenizer_name_or_path
 ):
     """
     A worker process for execution.
     """
+    # Create tokenizer inside worker to avoid pickling issues on macOS
+    tokenizer = AutoTokenizer.from_pretrained(pretrained_model_name_or_path=tokenizer_name_or_path)
     result_dict = dict()
     n_total_samples, n_correct_samples = 0, 0
 
@@ -45,11 +46,11 @@ def worker_execute(
     generator = Generator(args, api_key_file=apifile)
     em_and_f1 = TaTQAEmAndF1()
 
-    pbar = tqdm(enumerate(dataset), total=len(dataset), desc=f"Augment Exec Worker {pid}", position=pid, leave=True)
-    for eid, data_item in pbar:
+    for eid, data_item in enumerate(dataset):
         eid = str(eid)
         if eid not in nsql_dict:
             continue
+        print(f"Process#{pid}: eid {eid}, wtq-id {data_item['id']}")
         result_dict[eid] = dict()
         result_dict[eid]['question'] = data_item['question']
         result_dict[eid]['gold_answer'] = data_item['answer_text']
@@ -62,6 +63,7 @@ def worker_execute(
         exec_answer_list = []
         base_sqls = None
         for idx, nsql in enumerate(nsql_dict[eid]['nsqls']):
+            print(f"Process#{pid}: eid {eid}, original_id {data_item['id']}, executing program#{idx}")
             try:
                 exec_data_item = copy.deepcopy(data_item)
                 table = exec_data_item['table']
@@ -181,7 +183,10 @@ def worker_execute(
 
                     prompt_text = prompt
 
+                print(f"Process#{pid}: Building prompt for eid#{eid}, original_id#{exec_data_item['id']}")
                 built_few_shot_prompts = [(eid, prompt)]
+
+                print(f"Process#{pid}: Prompts ready with {len(built_few_shot_prompts)} parallels. Run openai API.")
                 need_api_call = True
                 
                 if len(nsql_dict[eid]['nsqls']) > 1 and len(aug_commands) == 0:
@@ -225,14 +230,14 @@ def worker_execute(
                             exec_answer = [floatify_ans(exec_answer)]
                         exec_answer_list.append(exec_answer)
                     except Exception as e:
-                        tqdm.write(f"Worker {pid}: SQL exec error on eid {eid}, query #{sql_ind}: {e}")
+                        print(f"Process#{pid}\nError when executing SQL query #{sql_ind}: Execution error {e}")
                         exec_histories[sql_ind].append(str(e))
                         exec_answer = '<error>'
                         exec_answer_list.append(exec_answer)
                         result_dict[eid]['failed_executions'].append(
                             [idx*args.sampling_n+sql_ind, nsql, exec_histories[sql_ind][-1]])
             except Exception as e:
-                tqdm.write(f"Worker {pid}: Augmentation error on eid {eid}: {e}")
+                print(f"Process#{pid}\nError when augmenting table\nAugmentation error {e}")
                 exec_answer = ['<error>'] * args.sampling_n
                 exec_answer_list.extend(exec_answer)
                 result_dict[eid]['nsqls'].extend(['<error>'] * args.sampling_n)
@@ -254,6 +259,8 @@ def worker_execute(
         gold_answer = data_item['answer_text']
         if args.dataset == 'tatqa' and len(gold_answer) == 2 and gold_answer[-1] == '###':
             gold_answer = gold_answer[0]
+        print(f'Process#{pid}: pred answer: {pred_answer}')
+        print(f'Process#{pid}: gold answer: {gold_answer}')
         if args.dataset == 'tatqa':
             data_item['answer'] = gold_answer
             if pred_answer == '<error|empty>':
@@ -275,7 +282,11 @@ def worker_execute(
         result_dict[eid]['score'] = score
         result_dict[eid]['exec_histories'] = exec_histories
         n_correct_samples += score
-        pbar.set_postfix(acc=f"{n_correct_samples}/{n_total_samples} ({n_correct_samples / n_total_samples:.2%})")
+        if score == 1:
+            print(f'Process#{pid}: Correct!')
+        else:
+            print(f'Process#{pid}: Wrong.')
+        print(f'Process#{pid}: Accuracy: {n_correct_samples}/{n_total_samples} = {n_correct_samples / n_total_samples}')
 
     return result_dict
 
@@ -324,19 +335,20 @@ def main():
     result_dict = dict()
     worker_results = []
 
+    # Pass tokenizer name/path instead of object to avoid pickling issues on macOS
     if 'gpt' in args.engine:
-        tokenizer = AutoTokenizer.from_pretrained(pretrained_model_name_or_path=os.path.join(ROOT_DIR, "utils", "gpt2"))
+        tokenizer_name_or_path = os.path.join(ROOT_DIR, "utils", "gpt2")
     else:
-        tokenizer = AutoTokenizer.from_pretrained(pretrained_model_name_or_path=args.engine)
+        tokenizer_name_or_path = args.engine
+    
     if args.debug:
         pid = 0
-        import pdb; pdb.set_trace()
         worker_results = worker_execute(
             pid,
             args,
             dataset,
             nsql_dict_group[pid],
-            tokenizer, 
+            tokenizer_name_or_path, 
         )
         result_dict.update(worker_results)
     else:
@@ -347,7 +359,7 @@ def main():
                 args,
                 dataset,
                 nsql_dict_group[pid],
-                tokenizer
+                tokenizer_name_or_path
             )))
 
         # Merge worker results
@@ -363,7 +375,9 @@ def main():
     print(f'Overall Accuracy: {n_correct_samples}/{len(result_dict)} = {n_correct_samples / len(result_dict)}')
 
     # Save program executions
-    with open(os.path.join(args.save_dir, args.output_program_execution_file), 'w') as f:
+    output_path = os.path.join(args.save_dir, args.output_program_execution_file)
+    os.makedirs(os.path.dirname(output_path), exist_ok=True)
+    with open(output_path, 'w') as f:
         json.dump(result_dict, f)
 
     print(f'Done. Elapsed time: {time.time() - start_time}')

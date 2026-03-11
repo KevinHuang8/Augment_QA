@@ -1,6 +1,5 @@
 """
 Multiprocess annotating binder programs.
-Adapted for local vLLM inference (Qwen, etc.) instead of OpenAI API.
 """
 
 import time
@@ -10,7 +9,7 @@ import copy
 import os
 import random
 import pyrootutils
-pyrootutils.setup_root(search_from=__file__, indicator=".project-root", pythonpath=True)
+pyrootutils.setup_root(".project-root", pythonpath=True)
 
 import func_timeout
 from typing import List
@@ -26,8 +25,6 @@ from utils.utils import load_data_split
 from nsql.database import NeuralDB
 
 ROOT_DIR = os.path.join(os.path.dirname(__file__), "../")
-
-VLLM_BASE_URL = os.environ.get("VLLM_BASE_URL", "http://localhost:8000/v1")
 
 
 def safe_execute(code_string: str, keys=None):
@@ -60,10 +57,7 @@ def parse_api_result(result):
 
 @retry(stop=stop_after_attempt(6), wait=wait_exponential(multiplier=1, min=4, max=30))
 def call_chatgpt_api(engine, messages, max_tokens, temperature, top_p, n, stop, key):
-    client = OpenAI(
-        base_url=VLLM_BASE_URL,
-        api_key="dummy"
-    )
+    client = OpenAI(api_key=key)
     
     result = client.chat.completions.create(
         model=engine,
@@ -73,6 +67,7 @@ def call_chatgpt_api(engine, messages, max_tokens, temperature, top_p, n, stop, 
         top_p=top_p,
         n=n,
         stop=stop,
+        seed=0,
     )
     
     return result
@@ -91,13 +86,12 @@ def worker_annotate(
         args,
         g_eids: List,
         dataset,
-        tokenizer
+        tokenizer_name_or_path
 ):
     """
     A worker process for annotating.
     """
-    with open(args.api_config_file, 'r') as f:
-        keys = [line.strip() for line in f.readlines()]
+    tokenizer = AutoTokenizer.from_pretrained(pretrained_model_name_or_path=tokenizer_name_or_path)
     generator = Generator(args, api_key_file=args.api_config_file)
 
     g_dict = dict()
@@ -123,7 +117,7 @@ def worker_annotate(
             max_row -= 10
             query_table = linearize_table(g_data_item, n_rows=max_row)
         generate_prompt += query_table
-        prompt = generate_prompt
+        prompt = few_shot_prompt + "\n\n" + generate_prompt
 
         # Ensure the input length fit Codex max input tokens by shrinking the n_shots
         prompt_text = prompt
@@ -134,26 +128,17 @@ def worker_annotate(
                 file_path=args.prompt_file,
                 n_shots=n_shots
             )
-            prompt = generate_prompt
+            prompt = few_shot_prompt + "\n\n" + generate_prompt
             prompt_text = prompt
 
-        prompt += '\nWrite a python program to answer the question. Save the answer in a variable named "ans". Do not output anything else other than the python code.'
-
         print(f"Process#{pid}: Building prompt for eid#{g_eid}, original_id#{g_data_item['id']}")
-        messages = [
-            {"role": "user", "content": prompt}
-        ]
-        result = call_chatgpt_api(
-            args.engine,
-            messages,
-            max_tokens=256,
-            temperature=0.0,
-            top_p=1,
-            n=1,
-            stop=['\n\n'],
-            key=keys[pid % len(keys)]
+        response_dict = generator.generate_one_pass(
+            prompts=[(g_eid, prompt)],
+            verbose=args.verbose,
+            include_system_prompt=True
         )
-        codes = parse_api_result(result)
+        codes = [text.replace('```python\n', '').replace('```Python\n', '').replace('```PYTHON\n', '').replace('```', '').strip()
+                 for text in response_dict[g_eid]]
         error_msg = ''
         r = codes[0]
         if 'ans =' in r or 'ans=' in r:
@@ -185,9 +170,6 @@ def worker_annotate(
             correct_num += 1
             print(f"Process#{pid}: eid#{g_eid} correct!")
         else:
-            print(f'prompt: {prompt}')
-            print(f'program: {r}')
-            print(f'expected: {gold_answer}, predicted: {ans}')
             print(f"Process#{pid}: eid#{g_eid} wrong!")
         total_num += 1
         print(f"Process#{pid}: {correct_num}/{total_num} = {correct_num / total_num}")
@@ -200,7 +182,7 @@ def main():
     args.api_config_file = os.path.join(ROOT_DIR, args.api_config_file)
     args.prompt_file = os.path.join(ROOT_DIR, args.prompt_file)
     print(f"==================== Prompt file: {args.prompt_file} ====================")
-    # args.save_dir = os.path.join(ROOT_DIR, args.save_dir)
+    args.save_dir = os.path.join(ROOT_DIR, args.save_dir)
     os.makedirs(args.save_dir, exist_ok=True)
     args.stop_tokens = "\n\n" if 'code' in args.prompt_file else "\n\n\n"
 
@@ -217,20 +199,19 @@ def main():
         generate_eids_group[(int(g_eid) + random.randrange(args.n_processes)) % args.n_processes].append(g_eid)
     print('\n******* Annotating *******')
     if 'gpt' in args.engine:
-        tokenizer = AutoTokenizer.from_pretrained(pretrained_model_name_or_path=os.path.join(ROOT_DIR, "utils", "gpt2"))
+        tokenizer_name_or_path = os.path.join(ROOT_DIR, "utils", "gpt2")
     else:
-        tokenizer = AutoTokenizer.from_pretrained(pretrained_model_name_or_path=args.engine)
+        tokenizer_name_or_path = args.engine
     
     g_dict = dict()
     worker_results = []
-    if args.n_processes == 1:
-        # Single process: call worker directly to avoid multiprocessing pickling issues
+    if args.debug: 
         res = worker_annotate(
             0,
             args,
             generate_eids_group[0],
             dataset,
-            tokenizer
+            tokenizer_name_or_path
         )
         g_dict.update(res)
     else:
@@ -241,7 +222,7 @@ def main():
                 args,
                 generate_eids_group[pid],
                 dataset,
-                tokenizer
+                tokenizer_name_or_path
             )))
 
         # Merge annotation results
@@ -260,6 +241,7 @@ def main():
         n_correct_samples += item['score']
     print(f'Overall Accuracy: {n_correct_samples}/{len(g_dict)} = {n_correct_samples / len(g_dict)}')
     
+    # Save annotation results
     with open(os.path.join(args.save_dir, args.output_program_file), 'w') as f:
         json.dump(g_dict, f, indent=4)
 

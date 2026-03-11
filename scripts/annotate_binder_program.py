@@ -10,12 +10,11 @@ import os
 import random
 import re
 import pyrootutils
-pyrootutils.setup_root(search_from=__file__, indicator=".project-root", pythonpath=True)
+pyrootutils.setup_root(".project-root", pythonpath=True)
 
 from typing import List
 import platform
 import multiprocessing
-from tqdm import tqdm
 from transformers import AutoTokenizer
 
 from generation.generator import Generator
@@ -30,11 +29,13 @@ def worker_annotate(
         args,
         g_eids: List,
         dataset,
-        tokenizer
+        tokenizer_name_or_path
 ):
     """
     A worker process for annotating.
     """
+    # Create tokenizer inside worker to avoid pickling issues on macOS
+    tokenizer = AutoTokenizer.from_pretrained(pretrained_model_name_or_path=tokenizer_name_or_path)
     apifile = args.api_config_file
     generator = Generator(args, api_key_file=apifile, system_prompt_file=args.system_prompt_file)
 
@@ -43,8 +44,7 @@ def worker_annotate(
     built_few_shot_prompts = []
     required_patterns = [r'\b((in|from)\s+(the\s+)?report)\b', r'\b(not\s+(in\s+)?(the\s+)?table)\b']
 
-    pbar = tqdm(g_eids, desc=f"Annotate Worker {pid}", position=pid, leave=True)
-    for idx, g_eid in enumerate(pbar):
+    for idx, g_eid in enumerate(g_eids):
         g_data_item = dataset[g_eid]
         g_dict[g_eid] = {
             'generations': [],
@@ -72,9 +72,7 @@ def worker_annotate(
             info_title=db.table_titles[0],
             max_row=max_row
         )
-        system_prompt_tokens = len(tokenizer.tokenize(generator.system_prompt)) if generator.system_prompt else 0
-        chat_template_overhead = 20
-        max_prompt_tokens = args.max_api_total_tokens - args.max_generation_tokens - system_prompt_tokens - chat_template_overhead
+        max_prompt_tokens = args.max_api_total_tokens - args.max_generation_tokens
         while len(tokenizer.tokenize(query_table)) >= max_prompt_tokens - remain_tokens:
             max_row -= 10
             query_table = generator.build_generate_prompt(
@@ -100,7 +98,10 @@ def worker_annotate(
             prompt = few_shot_prompt + "\n\n" + generate_prompt
             prompt_text = prompt
 
+        print(f"Process#{pid}: Building prompt for eid#{g_eid}, original_id#{g_data_item['id']}")
         built_few_shot_prompts.append((g_eid, prompt))
+
+        print(f"Process#{pid}: Prompts ready with {len(built_few_shot_prompts)} parallels. Run openai API.")
         response_dict = generator.generate_one_pass(
             prompts=built_few_shot_prompts,
             verbose=args.verbose,
@@ -174,30 +175,22 @@ def main():
     for g_eid in generate_eids:
         generate_eids_group[(int(g_eid) + random.randrange(args.n_processes)) % args.n_processes].append(g_eid)
     print('\n******* Annotating *******')
+    # Pass tokenizer name/path instead of object to avoid pickling issues on macOS
     if 'gpt' in args.engine:
-        tokenizer = AutoTokenizer.from_pretrained(pretrained_model_name_or_path=os.path.join(ROOT_DIR, "utils", "gpt2"))
+        tokenizer_name_or_path = os.path.join(ROOT_DIR, "utils", "gpt2")
     else:
-        tokenizer = AutoTokenizer.from_pretrained(pretrained_model_name_or_path=args.engine)
+        tokenizer_name_or_path = args.engine
     
     g_dict = dict()
     worker_results = []
     if args.debug: 
-        import pdb; pdb.set_trace()
+        # Run without multiprocessing for debugging
         res = worker_annotate(
             0,
             args,
             generate_eids_group[0],
             dataset,
-            tokenizer
-        )
-        g_dict.update(res)
-    elif args.n_processes == 1:
-        res = worker_annotate(
-            0,
-            args,
-            generate_eids_group[0],
-            dataset,
-            tokenizer
+            tokenizer_name_or_path
         )
         g_dict.update(res)
     else:
@@ -208,7 +201,7 @@ def main():
                 args,
                 generate_eids_group[pid],
                 dataset,
-                tokenizer
+                tokenizer_name_or_path
             )))
 
         # Merge annotation results
@@ -219,7 +212,9 @@ def main():
         pool.join()
 
     # Save annotation results
-    with open(os.path.join(args.save_dir, args.output_program_file), 'w') as f:
+    output_path = os.path.join(args.save_dir, args.output_program_file)
+    os.makedirs(os.path.dirname(output_path), exist_ok=True)
+    with open(output_path, 'w') as f:
         json.dump(g_dict, f, indent=4)
 
     num_failed = sum([1 for i in g_dict.values() if len(i['generations']) != args.sampling_n])

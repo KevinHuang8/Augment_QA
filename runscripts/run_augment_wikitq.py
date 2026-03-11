@@ -10,7 +10,10 @@ N_SAMPLE_AUG = 1
 N_SAMPLE_SQL = 1
 AUG_TEMPERATURE = 0.0
 SQL_TEMPERATURE = 0.0
-ENGINE = 'gpt-3.5-turbo-1106'
+# vLLM model name: must match "model" in vllm_config.json. Used for output filenames and tokenizer.
+import json
+with open(os.path.join(ROOT_DIR, "vllm_config.json")) as f:
+    ENGINE = json.load(f)["model"]
 API_FILE = "key.txt"
 
 os.system(fr"""{TOKENIZER_FALSE}python {ROOT_DIR}/scripts/annotate_binder_program.py --dataset {DATASET} \
