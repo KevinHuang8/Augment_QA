@@ -70,7 +70,7 @@ if __name__ == "__main__":
     client = OpenAI(base_url=args.base_url, api_key="dummy")
 
     data_path = os.path.join(os.path.dirname(__file__),
-                             "../../Augment_tableQA/datasets/tatqa_validation.json")
+                             "../../datasets/tatqa_validation.json")
     with open(data_path) as f:
         tatqa = json.load(f)
 
