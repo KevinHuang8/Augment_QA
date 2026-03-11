@@ -16,8 +16,8 @@ Already included in repo
 
 (Loading the model and running each baseline is provided in each associated script)
 
-AugmentQA - 
-End to End -
-PoT and Binder baselines - run all cells in `run.ipynb`
-CoT -
+- **AugmentQA** -
+- **End to End** -
+- **PoT and Binder baselines** - run all cells in `run.ipynb`
+- **CoT** - run all cells in `table_cot_experiments.ipynb`
 
