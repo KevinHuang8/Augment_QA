@@ -22,6 +22,7 @@ See [VLLM_SETUP.md](VLLM_SETUP.md) for starting the vLLM server (including T4 GP
 The running scripts are provided in `runscripts/`. To run our method, please use `run_augment_finqa.py`, `run_augment_tatqa.py`, and `run_augment_wikitq.py`. The output will be stored in `results/` and the performance will be printed.
 Note: We observe that there might be about 1% random performance variation even if we use greedy decoding. You might try to run the code again if you can't get the number reported in the paper.
 
+<<<<<<< HEAD
 ## References
 If you find our work useful for your research, please consider citing our paper:
 ```
@@ -34,6 +35,12 @@ If you find our work useful for your research, please consider citing our paper:
       primaryClass={cs.CL}
 }
 ```
+=======
+- **AugmentQA** -
+- **End to End** - run files as per the dataset you want to evaluate on `run_augment_{dataset_name}.py` using VLLM config present in the `VLLM_SETUP.md` in `Augment_QA/endtoend`
+- **PoT and Binder baselines** - run all cells in `run.ipynb`
+- **CoT** - run all cells in `table_cot_experiments.ipynb`
+>>>>>>> 1714b50c02dd630d5ef7cbc50ab6520816ffeac5
 
 Our implementation is based on the following repos:
 * https://github.com/xlang-ai/Binder
