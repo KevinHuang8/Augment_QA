@@ -14,9 +14,7 @@ parser.add_argument("--start", required=True, type=int)
 parser.add_argument("--end", required=True, type=int)
 parser.add_argument("--dry_run", default=False, action="store_true",
     help="whether it's a dry run or real run.")
-parser.add_argument(
-    "--temperature", type=float, default=0.7,
-    help="temperature of 0 implies greedy sampling.")
+parser.add_argument("--temperature", type=float, default=0.0)
 
 demonstration = {}
 demonstration['direct'] = """
@@ -121,7 +119,7 @@ if __name__ == "__main__":
             response = client.chat.completions.create(
               model=args.model,
               messages=[{"role": "user", "content": prompt}],
-              temperature=0.1,
+              temperature=0.0,
               max_tokens=256,
               top_p=1,
             )

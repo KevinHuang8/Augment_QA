@@ -13,7 +13,7 @@ parser.add_argument("--start", required=True, type=int)
 parser.add_argument("--end", required=True, type=int)
 parser.add_argument("--dry_run", default=False, action="store_true",
     help="whether it's a dry run or real run.")
-parser.add_argument("--temperature", type=float, default=0.1)
+parser.add_argument("--temperature", type=float, default=0.0)
 parser.add_argument("--base_url", type=str, default="http://localhost:8000/v1")
 
 demonstration = {}
@@ -146,7 +146,7 @@ if __name__ == "__main__":
                 model=args.model,
                 messages=[{"role": "user", "content": prompt}],
                 temperature=args.temperature,
-                max_tokens=512,
+                max_tokens=256,
                 top_p=1,
             )
             response = response.choices[0].message.content.strip()
