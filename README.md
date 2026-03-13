@@ -1,35 +1,31 @@
 # Augment_tableQA
 This is the implementation for the paper: [Augment before You Try: Knowledge-Enhanced Table Question Answering via Table Expansion](https://arxiv.org/abs/2401.15555).
 
-## Requirements
-### Environment
-Install conda environment by running
-```
-conda env create -f environment.yml
-conda activate augment
+### Dependencies
+
+```bash
+pip install -r requirements.txt
 ```
 
-## Usage
-### 1) OpenAI key
-Add your openai API keys in key.txt, one for each line.
+For End-to-End and AugmentQA, vLLM must also be installed and running to serve the model locally. See the `VLLM_SETUP.md` in the `endtoend` branch for full setup instructions. For CoT, PoT, and Binder baselines, running the notebooks mentioned in the evaluation section handles it. The commands such as evaluation and scoring commands are provided in the notebooks as well.
 
-### 2) Run scripts
-The running scripts are provided in `runscripts/`. To run our method, please use `run_augment_finqa.py`, `run_augment_tatqa.py`, and `run_augment_wikitq.py`. The output will be stored in `results/` and the performance will be printed.
-Note: We observe that there might be about 1% random performance variation even if we use greedy decoding. You might try to run the code again if you can't get the number reported in the paper.
+### Pretrained Model
 
-## References
-If you find our work useful for your research, please consider citing our paper:
-```
-@misc{liu2024augment,
-      title={Augment before You Try: Knowledge-Enhanced Table Question Answering via Table Expansion}, 
-      author={Yujian Liu and Jiabao Ji and Tong Yu and Ryan Rossi and Sungchul Kim and Handong Zhao and Ritwik Sinha and Yang Zhang and Shiyu Chang},
-      year={2024},
-      eprint={2401.15555},
-      archivePrefix={arXiv},
-      primaryClass={cs.CL}
-}
-```
+We use [Qwen 2.5 3B Instruct](https://huggingface.co/Qwen/Qwen2.5-3B-Instruct).
+### Data Download
 
-Our implementation is based on the following repos:
-* https://github.com/xlang-ai/Binder
-* https://github.com/wenhuchen/Program-of-Thoughts
+All datasets are either already included in the repo or downloaded at runtime. No additional download is required.
+
+### Preprocessing
+
+No preprocessing is required. The datasets are pre-filtered to match the experimental setup described in the paper.
+
+### Evaluation
+
+(Loading the model and running each baseline is provided in each associated script)
+
+- **AugmentQA** - run files as per the dataset you want to evaluate on `run_augment_{dataset_name}.py` using VLLM config present in the `VLLM_SETUP.md` in `Augment_QA/endtoend` branch
+- **End to End** - run files as per the dataset you want to evaluate on `run_endtoend_{dataset_name}.py` using VLLM config present in the `VLLM_SETUP.md` in `Augment_QA/endtoend` branch
+- **PoT and Binder baselines** - run all cells in `run.ipynb`
+- **CoT** - run all cells in `table_cot_experiments.ipynb`
+
