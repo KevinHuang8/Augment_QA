@@ -38,7 +38,7 @@ All commands below should be run from `Augment_QA/`. Loading the model and runni
   python runscripts/run_endtoend_wikitq.py
   ```
 
-  For detailed documentation on running AugmentQA and End-to-End (setup, advanced usage, direct script invocation), see the [`endtoend`](https://github.com/KevinHuang8/Augment_QA/endtoend) branch.
+  For detailed documentation on running AugmentQA and End-to-End (setup, advanced usage, direct script invocation), see the [`endtoend`](https://github.com/KevinHuang8/Augment_QA/tree/endtoend) branch.
 
 - **PoT and Binder baselines** — run all cells in `run.ipynb`
 - **CoT** — run all cells in `table_cot_experiments.ipynb`
