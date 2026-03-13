@@ -3,14 +3,22 @@ This is the implementation for the paper: [Augment before You Try: Knowledge-Enh
 
 ### Dependencies
 
-
+```bash
+pip install -r requirements.txt
 ```
-pip install requirements.txt
-```
 
-### Data download
+For End-to-End and AugmentQA, vLLM must also be installed and running to serve the model locally. See the `VLLM_SETUP.md` in the `endtoend` branch for full setup instructions. Requires approximately 12 GB VRAM. For CoT, PoT, and Binder baselines, running the notebooks mentioned in the evaluation section handles it. The commands such as evaluation and scoring commands are provided in the notebooks as well.
 
-Already included in repo
+### Pretrained Model
+
+We use [Qwen 2.5 3B Instruct](https://huggingface.co/Qwen/Qwen2.5-3B-Instruct).
+### Data Download
+
+All datasets are either already included in the repo or downloaded at runtime. No additional download is required.
+
+### Preprocessing
+
+No preprocessing is required beyond cloning the repository. The datasets are pre-filtered to match the experimental setup described in the paper.
 
 ### Evaluation
 
