@@ -7,7 +7,7 @@ This is the implementation for the paper: [Augment before You Try: Knowledge-Enh
 pip install -r requirements.txt
 ```
 
-For End-to-End and AugmentQA, vLLM must also be installed and running to serve the model locally. See the `VLLM_SETUP.md` in the `endtoend` branch for full setup instructions. Requires approximately 12 GB VRAM. For CoT, PoT, and Binder baselines, running the notebooks mentioned in the evaluation section handles it. The commands such as evaluation and scoring commands are provided in the notebooks as well.
+For End-to-End and AugmentQA, vLLM must also be installed and running to serve the model locally. See the `VLLM_SETUP.md` in the `endtoend` branch for full setup instructions. For CoT, PoT, and Binder baselines, running the notebooks mentioned in the evaluation section handles it. The commands such as evaluation and scoring commands are provided in the notebooks as well.
 
 ### Pretrained Model
 
@@ -18,7 +18,7 @@ All datasets are either already included in the repo or downloaded at runtime. N
 
 ### Preprocessing
 
-No preprocessing is required beyond cloning the repository. The datasets are pre-filtered to match the experimental setup described in the paper.
+No preprocessing is required. The datasets are pre-filtered to match the experimental setup described in the paper.
 
 ### Evaluation
 
