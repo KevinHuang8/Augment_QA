@@ -72,7 +72,7 @@ if __name__ == "__main__":
                         tmp = client.chat.completions.create(
                           model="Qwen/Qwen2.5-3B-Instruct",
                           messages=[{"role": "user", "content": prompt}],
-                          temperature=0.1,
+                          temperature=0.0,
                           max_tokens=64,
                           top_p=1,
                         )

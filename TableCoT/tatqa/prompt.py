@@ -11,7 +11,7 @@ parser.add_argument("--model", default='Qwen/Qwen2.5-3B-Instruct', type=str)
 parser.add_argument("--start", required=True, type=int)
 parser.add_argument("--end", required=True, type=int)
 parser.add_argument("--dry_run", default=False, action="store_true")
-parser.add_argument("--temperature", type=float, default=0.1)
+parser.add_argument("--temperature", type=float, default=0.0)
 parser.add_argument("--base_url", type=str, default="http://localhost:8000/v1")
 
 demonstration = {}
